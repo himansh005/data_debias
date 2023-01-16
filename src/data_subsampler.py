@@ -66,15 +66,16 @@ class DataSubsampler:
     return Dataset.from_pandas(dataset)
 
 
-  def subsample(self, dataset, sample, method="random"):
+  def subsample(self, dataset, samples, method="random"):
 
     methods = ["random", "most-biased", "diverse", "diverse-most-biased"]
     if method not in methods:
       raise Exception("Method can only be one of: {}".format(",".join(methods)))
     
-    if sample[-1]=="%":
-      samples = int(len(dataset)*(int(sample[:-1])/100))
-      self.logger.debug("Using {} out of {} rows in the dataset".format(samples, len(dataset)))
+    if type(samples) is str:
+      samples = int(len(dataset)*(int(samples[:-1])/100))
+    
+    self.logger.debug("Using {} out of {} rows in the dataset".format(samples, len(dataset)))
     
     if method=="random":
       dataset = dataset.shuffle(seed=self.config["seed"]).select(range(samples))
@@ -82,34 +83,35 @@ class DataSubsampler:
     elif method=="most-biased":
       dataset = dataset.sort('bias', reverse=True)
       dataset = dataset.select(range(samples))
+
     
     #TODO: add other two methods
-    
+
     return dataset
 
-if __name__=="__main__":
+# if __name__=="__main__":
 
-  experiments = [
-      {
-        "name_mask_method":"smart_random_masking",
-        "nonname_mask_method":"smart_random_masking",
-        "naive_mask_token":"person",
-        "seed":701,
-        "persistence_dir":"src/logs",
-        "save_data":True,
-        "experiment_id":1,
-        "load_saved_data":False,
-        "max_length":512
-      }
-    ]
+#   experiments = [
+#       {
+#         "name_mask_method":"smart_random_masking",
+#         "nonname_mask_method":"smart_random_masking",
+#         "naive_mask_token":"person",
+#         "seed":701,
+#         "persistence_dir":"src/logs",
+#         "save_data":True,
+#         "experiment_id":1,
+#         "load_saved_data":False,
+#         "max_length":512
+#       }
+#     ]
     
 
-  for config in experiments:
-    print(config)
-    dataTransformer = DataSubsampler(config, "/Users/Himanshu/Developer/")
-    dataset = load_dataset("csv", data_files="ssd.csv", split="train")
-    # dataset = dataset.rename_column("context", "text")
-    dataset = dataset.shuffle(seed=701).select(range(20))
-    dataset = dataTransformer.subsample(dataset, 10)
-    print(dataset)
+#   for config in experiments:
+#     print(config)
+#     dataTransformer = DataSubsampler(config, "/Users/Himanshu/Developer/")
+#     dataset = load_dataset("csv", data_files="ssd.csv", split="train")
+#     # dataset = dataset.rename_column("context", "text")
+#     dataset = dataset.shuffle(seed=701).select(range(20))
+#     dataset = dataTransformer.subsample(dataset, 10)
+#     print(dataset)
   

@@ -34,7 +34,7 @@ class BiasFinder:
     self.stemmer = SnowballStemmer("english")
 
     # 2. Populate non-names
-    with open(os.path.join(root, "data_debias/data/", "male_female_pairs.txt"), "r") as f:
+    with open(os.path.join(root, "data", "male_female_pairs.txt"), "r") as f:
       
       data = f.readlines()
       for i in range(len(data)):
@@ -56,20 +56,20 @@ class BiasFinder:
         self.f2m[female_word] = male_word
         self.f2m[self.stemmer.stem(female_word)] = male_word
 
-    with open(os.path.join(root, "data_debias/data/", "cda_default_pairs.json"), "r") as f:
+    with open(os.path.join(root, "data", "cda_default_pairs.json"), "r") as f:
       data = json.loads(f.read())
       for i in data:
         self.f2m[i[1]] = i[0]
         self.m2f[i[0]] = i[1]
 
     # 3. Populate names
-    with open(os.path.join(root, "data_debias/data/","female_names.txt"), "r") as f:
+    with open(os.path.join(root, "data","female_names.txt"), "r") as f:
       self.female_names = set([x.strip().lower() for x in f.readlines()])
     
-    with open(os.path.join(root, "data_debias/data/", "male_names.txt"), "r") as f:
+    with open(os.path.join(root, "data", "male_names.txt"), "r") as f:
       self.male_names = set([x.strip().lower() for x in f.readlines()])
     
-    with open(os.path.join(root, "data_debias/data/", "names_pairs_1000_scaled.json"), "r") as f:
+    with open(os.path.join(root, "data", "names_pairs_1000_scaled.json"), "r") as f:
       
       data = json.loads(f.read())
       for i in data:
@@ -77,7 +77,7 @@ class BiasFinder:
         self.female_names.add(i[1])
 
     # 4. Populate neutrals
-    with open(os.path.join(root, "data_debias/data/", "search-and-suggest.json"), "r") as f:
+    with open(os.path.join(root, "data", "search-and-suggest.json"), "r") as f:
       data = json.loads(f.read())
 
     for obj in data:
@@ -138,17 +138,25 @@ class BiasFinder:
     
     text = " ".join(text)
     self.logger.debug(text)
+
+    if self.words_scanned==0:
+      self.scores.append(-1)
+      return text
     fill_stems = {}
 
     predictions = self.mask_filler(text)
     score = 0.0
 
     for prediction in predictions:
-      #each mask
+      
       other_map = {}
+      if len(prediction) == 0:
+        continue
+      if type(prediction) is not list:
+        prediction = [prediction]
 
       for candidate in prediction:
-        #possible values
+
         possible_fill = candidate["token_str"]
         possible_fill_score = candidate["score"]
 
@@ -242,8 +250,10 @@ class BiasFinder:
 
   def modify_data(self, dataset, subset=None):
     
+
+    original_dataset = copy.deepcopy(dataset)
     if "load_saved_data" in self.config and self.config["load_saved_data"]:
-      data_output_path = os.path.join(self.root, "data_debias/data", str(self.config["dataset"]+"_"+self.config["model"]+"_confidence.h5"))
+      data_output_path = os.path.join(self.root, self.config["persistence_dir"], "data", str(self.config["experiment_id"]), str(self.config["dataset"]+"_"+self.config["model"]+"_confidence.h5"))
       if(os.path.exists(data_output_path)):
         dataset = dataset.load_from_disk(data_output_path)
         self.logger.warning("Reusing data from {}".format(data_output_path))
@@ -254,9 +264,11 @@ class BiasFinder:
           }
 
     dataset = dataset.map(self.process_batch, fn_kwargs=args, batched=True)
-    dataset = dataset.add_column("confidence_difference", self.scores)
+    dataset = original_dataset.add_column("bias", self.scores)
 
-    output_path = os.path.join(self.root, "data_debias", self.config["persistence_dir"], "opposite_words_conf_"+str(self.config["experiment_id"])+".csv")  
+    output_path = os.path.join(self.root, self.config["persistence_dir"], "intervention_stats", str(self.config["experiment_id"]), "opposite_words_confidences.csv")  
+    Path(os.path.dirname(output_path)).mkdir(parents=True, exist_ok=True)
+
     df = pd.DataFrame(data=self.opp_words, columns=["word", "opp_word", "confidence_difference"])
     df.to_csv(output_path, index=False)
 
@@ -264,38 +276,38 @@ class BiasFinder:
     self.rows_changed=0
     self.swaps = []
     
-    new_words = self.new_words
     self.new_words = []
     self.wandb.log({"avg_dataset_bias":sum(self.scores)/len(self.scores)})
     self.logger.debug("Average Prediction Bias: {}".format(str(sum(self.scores)/len(self.scores))))
 
-    data_output_path = os.path.join(self.root, "data_debias/data", str(self.config["dataset"]+"_"+self.config["model"]+"_confidence.h5"))
+    data_output_path = os.path.join(self.root, self.config["persistence_dir"], "data", str(self.config["experiment_id"]), str(self.config["dataset"]+"_"+self.config["model"]+"_confidence.h5"))
     if self.config["save_data"]:
+        Path(os.path.dirname(data_output_path)).mkdir(parents=True, exist_ok=True)
         dataset.save_to_disk(data_output_path)
 
     return dataset
 
-if __name__=="__main__":
+# if __name__=="__main__":
 
-  experiments = [
-      {
-        "name_mask_method":"smart_random_masking",
-        "nonname_mask_method":"smart_random_masking",
-        "naive_mask_token":"person",
-        "seed":701,
-        "persistence_dir":"src/logs",
-        "save_data":True,
-        "experiment_id":1,
-        "load_saved_data":False
-      }
-    ]
+#   experiments = [
+#       {
+#         "name_mask_method":"smart_random_masking",
+#         "nonname_mask_method":"smart_random_masking",
+#         "naive_mask_token":"person",
+#         "seed":701,
+#         "persistence_dir":"src/logs",
+#         "save_data":True,
+#         "experiment_id":1,
+#         "load_saved_data":False
+#       }
+#     ]
     
 
-  for config in experiments:
+#   for config in experiments:
 
-    dataTransformer = BiasFinder(config, "drive/Othercomputers/mba/")
-    dataset = load_dataset("csv", data_files="ssd.csv", split="train")
-    dataset = dataset.rename_column("context", "text")
-    dataset = dataTransformer.modify_data(dataset)
-    print(dataset)
+#     dataTransformer = BiasFinder(config, "drive/Othercomputers/mba/")
+#     dataset = load_dataset("csv", data_files="ssd.csv", split="train")
+#     dataset = dataset.rename_column("context", "text")
+#     dataset = dataTransformer.modify_data(dataset)
+#     print(dataset)
   

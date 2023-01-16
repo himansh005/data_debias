@@ -68,13 +68,15 @@ class CustomTrainer:
         return result
 
     def train(self, dataset, words):
+        
+        dataset = dataset.remove_columns("bias")
 
         d = dataset.train_test_split(test_size=0.1)
         def dataset_to_text(dataset, output_filename="data.txt"):
             """Utility function to save dataset text to disk,
             useful for using the texts to train the tokenizer 
             (as the tokenizer accepts files)"""
-            with open(output_filename, "w") as f:
+            with open(os.path.join(tempfile.gettempdir(), output_filename), "w") as f:
                 for t in dataset["text"]:
                     print(t, file=f)
 
@@ -98,9 +100,9 @@ class CustomTrainer:
         # # enable truncation up to the maximum 512 tokens
         #tokenizer.enable_truncation(max_length=max_length)
 
-        model_path = "pretrained-bert"
+        model_path = "pretrained"
         if not os.path.isdir(model_path):
-            os.mkdir(model_path)
+            os.mkdir(os.path.join(tempfile.gettempdir(), model_path))
 
         # # save the tokenizer  
         #tokenizer.save_model(model_path)
@@ -123,7 +125,7 @@ class CustomTrainer:
 
         # when the tokenizer is trained and configured, load it as BertTokenizerFast
         
-        tokenizer = BertTokenizerFast.from_pretrained("bert-base-uncased")
+        tokenizer = AutoTokenizer.from_pretrained(self.config["model"])
         #special_tokens_dict = {'additional_special_tokens': ['[START]', '[STOP]']}
         
         #num_added_toks = tokenizer.add_special_tokens(special_tokens_dict)
@@ -166,8 +168,8 @@ class CustomTrainer:
             test_dataset.set_format("torch")
 
         # initialize the model with the config
-        model_config = BertConfig(vocab_size=vocab_size, max_position_embeddings=max_length)
-        model = BertForMaskedLM.from_pretrained("bert-base-uncased", config=model_config)
+        model_config = AutoConfig.from_pretrained(self.config["model"])#(self.config["model"], vocab_size=vocab_size, max_position_embeddings=max_length)
+        model = AutoModelForMaskedLM.from_pretrained(self.config["model"], config=model_config)
         model.resize_token_embeddings(len(tokenizer))
         
         # for name, param in model.named_parameters():
@@ -179,16 +181,9 @@ class CustomTrainer:
             tokenizer=tokenizer, mlm=True, mlm_probability=self.config["mlm_prob"]
         )
         
-        # wandb.login(key="ef63b680965922a125fe3650444a6697c61d9246") #API Key is in your wandb account, under settings (wandb.ai/settings)
-        # run = wandb.init(
-        #     name = "Experiment: "+ str(self.config["experiment_id"]),
-        #     reinit = True, 
-        #     project = "data_debias", 
-        #     config = self.config
-        # )
-
+        
         training_args = TrainingArguments(
-            output_dir=self.config["persistence_dir"],          # output directory to where save model checkpoint
+            output_dir=tempfile.gettempdir(),          # output directory to where save model checkpoint
             evaluation_strategy="epoch",    # evaluate each `logging_steps` steps
             overwrite_output_dir=True,      
             num_train_epochs=self.config["epochs"],            # number of training epochs, feel free to tweak
@@ -224,8 +219,8 @@ class CustomTrainer:
         self.wandb.log({"mlm words":df})
 
         self.logger.debug("MLM words: {}".format(CustomTrainer.mlm_words))
-        model_path = os.path.join(self.root, "data_debias/models", self.config["model_family"], self.config["model"])
-
+        model_path = os.path.join(self.root, self.config["persistence_dir"], "models", str(self.config["experiment_id"]), self.config["model"])
+        Path(os.path.dirname(model_path)).mkdir(parents=True, exist_ok=True)
         trainer.save_model(model_path)
         tokenizer.save_pretrained(model_path)
 

@@ -12,7 +12,7 @@ class CustomDataset:
         config = self.config
 
         if config["dataset_type"]=="remote":
-            dataset = load_dataset(config["dataset"], split="train")
+            dataset = load_dataset(config["dataset"], split="train[:50]")
             dataset = dataset.rename_column("context", "text") #for squad
         
         elif config["dataset_type"]=="txt":    

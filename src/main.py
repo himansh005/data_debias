@@ -3,6 +3,7 @@ from dataloader import *
 from train import *
 from data_transformer import *
 from bias_finder  import *
+from data_subsampler import *
 
 def random_seed(SEED):
     random.seed(SEED)
@@ -27,19 +28,19 @@ if __name__=="__main__":
         "nonname_mask_method":"smart_random_masking",
         "naive_mask_token":"person",
         "seed":701,
-        "persistence_dir":"src/logs",
+        "persistence_dir":"working_dir",
         "save_data":True,
         "experiment_id":1,
         "load_saved_data":False,
         "epochs":1,
         "max_length":512,
         "mlm_prob":1.0,
-        "model_family":"good",
         "model":"bert-base-uncased",
-        "dataset_type":"csv",
-        "dataset":"ssd.csv",
+        "dataset_type":"remote",
+        "dataset":"squad",
         "sample":10,
-        "measure_initial_bias":True
+        "measure_initial_bias":True,
+        "sample_method":"random",
 
   }
   args = parser.parse_args()
@@ -63,13 +64,16 @@ if __name__=="__main__":
 
   if "measure_initial_bias" in config and config["measure_initial_bias"]:
 
-    dataTransformer = BiasFinder(config, root)
+    dataTransformer = BiasFinder(config, root, run)
     dataset = dataTransformer.modify_data(dataset)
+  
+  if "sample" in config:
+    dataSubsampler = DataSubsampler(config, root, run, config["model"])
+    dataset = dataSubsampler.subsample(dataset, config["sample"], config["sample_method"])
 
   dataTransformer = DataTransformer(config, root, run)
   dataset, new_words = dataTransformer.modify_data(dataset) #dataset, sample and intervention
-  #TODO: data bias: dataset, model
-  
+  #print(dataset[0])
   if not args.preprocess_only:
     customTrainer = CustomTrainer(config, root, run)
     model_path = customTrainer.train(dataset, new_words)

@@ -29,7 +29,7 @@ class DataTransformer:
     self.stemmer = SnowballStemmer("english")
 
     # 2. Populate non-names
-    with open(os.path.join(root, "data_debias/data/", "male_female_pairs.txt"), "r") as f:
+    with open(os.path.join(root, "data", "male_female_pairs.txt"), "r") as f:
       
       data = f.readlines()
       for i in range(len(data)):
@@ -51,20 +51,20 @@ class DataTransformer:
         self.f2m[female_word] = male_word
         self.f2m[self.stemmer.stem(female_word)] = male_word
 
-    with open(os.path.join(root, "data_debias/data/", "cda_default_pairs.json"), "r") as f:
+    with open(os.path.join(root, "data", "cda_default_pairs.json"), "r") as f:
       data = json.loads(f.read())
       for i in data:
         self.f2m[i[1]] = i[0]
         self.m2f[i[0]] = i[1]
 
     # 3. Populate names
-    with open(os.path.join(root, "data_debias/data/","female_names.txt"), "r") as f:
+    with open(os.path.join(root, "data","female_names.txt"), "r") as f:
       self.female_names = set([x.strip().lower() for x in f.readlines()])
     
-    with open(os.path.join(root, "data_debias/data/", "male_names.txt"), "r") as f:
+    with open(os.path.join(root, "data", "male_names.txt"), "r") as f:
       self.male_names = set([x.strip().lower() for x in f.readlines()])
     
-    with open(os.path.join(root, "data_debias/data/", "names_pairs_1000_scaled.json"), "r") as f:
+    with open(os.path.join(root, "data", "names_pairs_1000_scaled.json"), "r") as f:
       
       data = json.loads(f.read())
       for i in data:
@@ -72,7 +72,7 @@ class DataTransformer:
         self.female_names.add(i[1])
 
     # 4. Populate neutrals
-    with open(os.path.join(root, "data_debias/data/", "search-and-suggest.json"), "r") as f:
+    with open(os.path.join(root, "data", "search-and-suggest.json"), "r") as f:
       data = json.loads(f.read())
 
     for obj in data:
@@ -255,10 +255,10 @@ class DataTransformer:
   def modify_data(self, dataset):
     
     if "load_saved_data" in self.config and self.config["load_saved_data"]:
-      data_output_path = os.path.join(self.root, "data_debias/data", "transformed_data_"+str(self.config["experiment_id"])+".h5")
+      data_output_path = os.path.join(self.root, self.config["persistence_dir"], "data", str(self.config["experiment_id"]), self.config["dataset"] + "_" + str(self.config["sample"]) + "_" + self.config["name_mask_method"] +  "_" + self.config["nonname_mask_method"] + ".h5")
       if(os.path.exists(data_output_path)):
         dataset = dataset.load_from_disk(data_output_path)
-        words_output_path = os.path.join(self.root, "data_debias/data", "transformed_data_"+str(self.config["experiment_id"])+".pkl")
+        words_output_path = os.path.join(self.root, self.config["persistence_dir"], "data", str(self.config["experiment_id"]), self.config["dataset"] + "_" + str(self.config["sample"]) + "_" + self.config["name_mask_method"] + "_" + self.config["nonname_mask_method"] + ".pkl")
         with open(words_output_path, 'rb') as f:
           new_words = pickle.load(f)
         self.logger.warning("Reusing data from {}".format(data_output_path))
@@ -270,7 +270,8 @@ class DataTransformer:
 
     dataset = dataset.map(self.process_batch, fn_kwargs=args, batched=True)
     
-    output_path = os.path.join(self.root, "data_debias", self.config["persistence_dir"], "transformed_data_stats_"+str(self.config["experiment_id"])+".json")  
+    output_path = os.path.join(self.root, self.config["persistence_dir"], "intervention_stats", str(self.config["experiment_id"]), "swaps.json")  
+    Path(os.path.dirname(output_path)).mkdir(parents=True, exist_ok=True)
     with open(output_path, "w") as f:
       d = {
         "words_affected":self.words_scanned,
@@ -282,11 +283,12 @@ class DataTransformer:
     self.logger.debug("Number of Words Neutralized: {} |  Number of Entries Neutralised: {} | Total Entries: {}".format(self.words_scanned, self.rows_changed, len(dataset)))
     self.wandb.log(d)
 
-    output_path = os.path.join(self.root, "data_debias", self.config["persistence_dir"], "transformed_data_words_"+str(self.config["experiment_id"])+".csv")  
+    output_path = os.path.join(self.root,  self.config["persistence_dir"], "intervention_stats", str(self.config["experiment_id"]), "words.csv")  
+    Path(os.path.dirname(output_path)).mkdir(parents=True, exist_ok=True)
+
     with open(output_path, 'w') as csvfile:
       writer = csv.writer(csvfile, delimiter=',')
       writer.writerow(['before', 'after'])
-      self.swaps = list(set(self.swaps))
       for swap in self.swaps:
         writer.writerow(swap)
 
@@ -307,36 +309,37 @@ class DataTransformer:
     self.new_words = []
   
     if self.config["save_data"]:
-      data_output_path = os.path.join(self.root, "data_debias/data", self.config["dataset"] + "_" + str(self.config["sample"]) + "_" + self.config["intervention"] + ".h5")
+      data_output_path = os.path.join(self.root, self.config["persistence_dir"], "data", str(self.config["experiment_id"]), self.config["dataset"] + "_" + str(self.config["sample"]) + "_" + self.config["name_mask_method"] +  "_" + self.config["nonname_mask_method"] + ".h5")
+      Path(os.path.dirname(data_output_path)).mkdir(parents=True, exist_ok=True)
       dataset.save_to_disk(data_output_path)
-      words_output_path = os.path.join(self.root, "data_debias/data", self.config["dataset"] + "_" + str(self.config["sample"]) + "_" + self.config["intervention"] + ".pkl")
+      words_output_path = os.path.join(self.root, self.config["persistence_dir"], "data", str(self.config["experiment_id"]), self.config["dataset"] + "_" + str(self.config["sample"]) + "_" + self.config["name_mask_method"] + "_" + self.config["nonname_mask_method"] + ".pkl")
       with open(words_output_path, 'wb') as f:
         pickle.dump(list(set(new_words)), f)
     
     return dataset, new_words
 
-if __name__=="__main__":
+#if __name__=="__main__":
 
-  experiments = [
-      {
-        "name_mask_method":"smart_random_masking",
-        "nonname_mask_method":"smart_random_masking",
-        "naive_mask_token":"person",
-        "seed":701,
-        "persistence_dir":"src/logs",
-        "save_data":True,
-        "experiment_id":1,
-        "load_saved_data":True
-      }
-    ]
+  # experiments = [
+  #     {
+  #       "name_mask_method":"smart_random_masking",
+  #       "nonname_mask_method":"smart_random_masking",
+  #       "naive_mask_token":"person",
+  #       "seed":701,
+  #       "persistence_dir":"src/logs",
+  #       "save_data":True,
+  #       "experiment_id":1,
+  #       "load_saved_data":True
+  #     }
+  #   ]
     
 
-  for config in experiments:
-    print(config)
-    dataTransformer = DataTransformer(config, "/Users/Himanshu/Developer/")
-    dataset = load_dataset("csv", data_files="ssd.csv", split="train")
-    dataset = dataset.rename_column("context", "text")
-    dataset = dataset.shuffle(seed=701).select(range(10))
-    dataset, new_words = dataTransformer.modify_data(dataset)
-    print(new_words)
+  # for config in experiments:
+  #   print(config)
+  #   dataTransformer = DataTransformer(config, "/Users/Himanshu/Developer/")
+  #   dataset = load_dataset("csv", data_files="ssd.csv", split="train")
+  #   dataset = dataset.rename_column("context", "text")
+  #   dataset = dataset.shuffle(seed=701).select(range(10))
+  #   dataset, new_words = dataTransformer.modify_data(dataset)
+  #   print(new_words)
   
